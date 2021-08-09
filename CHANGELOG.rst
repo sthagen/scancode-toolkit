@@ -43,6 +43,47 @@ Package detection:
  - Add support to track installed files for each Package type.
 
 
+License detection:
+~~~~~~~~~~~~~~~~~~~
+
+- Unknown licenses have a new flag "is_unknown" to identify them
+  beyond just the naming convention of having "unknown" as part of their name.
+
+- Rules that match at least one unknown license have a flag "has_unknown" set
+  in the returned match results.
+
+
+Many thanks to every contributors that made this possible and in particular:
+
+- Akanksha Garg @akugarg
+- Ayan Sinha Mahapatra @AyanSinhaMahapatra
+- Jono Yang @JonoYang
+- Philippe Ombredanne @pombredanne
+
+
+
+v21.8.4
+---------
+
+This is a minor bug fix release primarily for Windows installation.
+There is no feature change.
+
+Installation:
+~~~~~~~~~~~~~~~~~~
+
+- Application installation on Windows works again. This fixes #2610
+- We now build and test app bundles on all supported Python versions: 3.6 to 3.9
+
+
+Thank you to @gunaztar for reporting the #2610 bug
+
+Documentation:
+~~~~~~~~~~~~~~~~~~
+
+- Documentation is updated to reference supported Python versions 3.6 to 3.9
+
+
+
 v21.7.30
 ---------
 
