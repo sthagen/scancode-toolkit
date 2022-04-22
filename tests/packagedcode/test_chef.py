@@ -11,25 +11,34 @@ import os.path
 
 from packagedcode import chef
 from packages_test_utils import PackageTester
+from scancode_config import REGEN_TEST_FIXTURES
 
 
 class TestChef(PackageTester):
     test_data_dir = os.path.join(os.path.dirname(__file__), 'data')
 
-    def test_parse_from_json(self):
+    def test_chef_metadata_json_is_package_data_file(self):
+        test_file = self.get_test_loc('chef/basic/metadata.json')
+        assert chef.MetadataJson.is_package_data_file(test_file)
+
+    def test_chef_metadata_rb_from_json(self):
         test_file = self.get_test_loc('chef/basic/metadata.json')
         expected_file = self.get_test_loc('chef/basic/metadata.json.expected')
-        self.check_package(chef.parse(test_file), expected_file, regen=False)
+        self.check_packages(chef.MetadataJson.recognize(test_file), expected_file, regen=REGEN_TEST_FIXTURES)
+
+    def test_chef_metadata_rb_is_package_data_file(self):
+        test_file = self.get_test_loc('chef/basic/metadata.rb')
+        assert chef.Metadatarb.is_package_data_file(test_file)
 
     def test_parse_from_rb(self):
         test_file = self.get_test_loc('chef/basic/metadata.rb')
         expected_file = self.get_test_loc('chef/basic/metadata.rb.expected')
-        self.check_package(chef.parse(test_file), expected_file, regen=False)
+        self.check_packages(chef.Metadatarb.recognize(test_file), expected_file, regen=REGEN_TEST_FIXTURES)
 
     def test_parse_from_rb_dependency_requirement(self):
         test_file = self.get_test_loc('chef/dependencies/metadata.rb')
         expected_file = self.get_test_loc('chef/dependencies/metadata.rb.expected')
-        self.check_package(chef.parse(test_file), expected_file, regen=False)
+        self.check_packages(chef.Metadatarb.recognize(test_file), expected_file, regen=REGEN_TEST_FIXTURES)
 
     def test_build_package(self):
         package_data = dict(
@@ -39,7 +48,7 @@ class TestChef(PackageTester):
             license='public-domain'
         )
         expected_file = self.get_test_loc('chef/basic/test_package.json.expected')
-        self.check_package(chef.build_package(package_data), expected_file, regen=False)
+        self.check_packages(chef.build_package(chef.MetadataJson, package_data), expected_file, regen=REGEN_TEST_FIXTURES)
 
     def test_build_package_long_description(self):
         package_data = dict(
@@ -49,7 +58,7 @@ class TestChef(PackageTester):
             license='public-domain'
         )
         expected_file = self.get_test_loc('chef/basic/test_package.json.expected')
-        self.check_package(chef.build_package(package_data), expected_file, regen=False)
+        self.check_packages(chef.build_package(chef.MetadataJson, package_data), expected_file, regen=REGEN_TEST_FIXTURES)
 
     def test_build_package_dependencies(self):
         package_data = dict(
@@ -60,7 +69,7 @@ class TestChef(PackageTester):
             dependencies={'test dependency': '0.01'}
         )
         expected_file = self.get_test_loc('chef/basic/test_package_dependencies.json.expected')
-        self.check_package(chef.build_package(package_data), expected_file, regen=False)
+        self.check_packages(chef.build_package(chef.MetadataJson, package_data), expected_file, regen=REGEN_TEST_FIXTURES)
 
     def test_build_package_parties(self):
         package_data = dict(
@@ -72,7 +81,7 @@ class TestChef(PackageTester):
             maintainer_email='test_maintainer@example.com',
         )
         expected_file = self.get_test_loc('chef/basic/test_package_parties.json.expected')
-        self.check_package(chef.build_package(package_data), expected_file, regen=False)
+        self.check_packages(chef.build_package(chef.MetadataJson, package_data), expected_file, regen=REGEN_TEST_FIXTURES)
 
     def test_build_package_code_view_url_and_bug_tracking_url(self):
         package_data = dict(
@@ -84,4 +93,4 @@ class TestChef(PackageTester):
             issues_url='example.com/issues'
         )
         expected_file = self.get_test_loc('chef/basic/test_package_code_view_url_and_bug_tracking_url.json.expected')
-        self.check_package(chef.build_package(package_data), expected_file, regen=False)
+        self.check_packages(chef.build_package(chef.MetadataJson, package_data), expected_file, regen=REGEN_TEST_FIXTURES)

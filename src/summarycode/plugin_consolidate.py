@@ -7,22 +7,22 @@
 # See https://aboutcode.org for more information about nexB OSS projects.
 #
 
+import warnings
 from collections import Counter
 
 import attr
+from license_expression import Licensing
 
 from cluecode.copyrights import CopyrightDetector
+from commoncode.cliutils import PluggableCommandLineOption
+from commoncode.cliutils import POST_SCAN_GROUP
 from commoncode.text import python_safe_name
-from license_expression import Licensing
 from packagedcode import get_package_instance
-from packagedcode.build import BaseBuildManifestPackage
+from packagedcode.build import BaseBuildManifestPackageData
 from packagedcode.utils import combine_expressions
 from plugincode.post_scan import PostScanPlugin
 from plugincode.post_scan import post_scan_impl
-from commoncode.cliutils import PluggableCommandLineOption
-from commoncode.cliutils import POST_SCAN_GROUP
-from summarycode import copyright_summary
-
+from summarycode import copyright_tallies
 
 # Tracing flags
 TRACE = False
@@ -64,10 +64,12 @@ class Consolidation(object):
     resources = attr.ib(default=attr.Factory(list))
 
     def to_dict(self, **kwargs):
+
         def dict_fields(attr, value):
-            if attr.name in ('resources', ):
+            if attr.name in ('resources',):
                 return False
             return True
+
         license_expressions_to_combine = []
         if self.core_license_expression:
             license_expressions_to_combine.append(self.core_license_expression)
@@ -88,7 +90,7 @@ class Consolidation(object):
 @attr.s
 class ConsolidatedComponent(object):
     # TODO: have an attribute for key files (one that strongly determines origin)
-    type=attr.ib()
+    type = attr.ib()
     consolidation = attr.ib()
 
     def to_dict(self, **kwargs):
@@ -106,6 +108,10 @@ class ConsolidatedPackage(object):
         package = self.package.to_dict()
         package.update(self.consolidation.to_dict())
         return package
+
+
+class ConsolidatorPluginDeprecationWarning(DeprecationWarning):
+    pass
 
 
 @post_scan_impl
@@ -151,6 +157,16 @@ class Consolidator(PostScanPlugin):
         return consolidate
 
     def process_codebase(self, codebase, **kwargs):
+        deprecation_message = "The --consolidate option will be deprecated in a future version of scancode-toolkit."
+        warnings.simplefilter('always', ConsolidatorPluginDeprecationWarning)
+        warnings.warn(
+            deprecation_message,
+            ConsolidatorPluginDeprecationWarning,
+            stacklevel=2,
+        )
+        codebase_header = codebase.get_or_create_current_header()
+        codebase_header.warnings.append(deprecation_message)
+
         # Collect ConsolidatedPackages and ConsolidatedComponents
         # TODO: Have a "catch-all" Component for the things that we haven't grouped
         consolidations = []
@@ -228,7 +244,7 @@ def get_consolidated_packages(codebase):
             package_root = package.get_package_root(resource, codebase)
             package_root.extra_data['package_root'] = True
             package_root.save(codebase)
-            is_build_file = isinstance(package, BaseBuildManifestPackage)
+            is_build_file = isinstance(package, BaseBuildManifestPackageData)
             package_resources = list(package.get_package_resources(package_root, codebase))
             package_license_expression = package.license_expression
             package_copyright = package.copyright
@@ -236,9 +252,17 @@ def get_consolidated_packages(codebase):
             package_holders = []
             if package_copyright:
                 numbered_lines = [(0, package_copyright)]
-                for _, holder, _, _ in CopyrightDetector().detect(numbered_lines,
-                        copyrights=False, holders=True, authors=False, include_years=False):
-                    package_holders.append(holder)
+
+                holder_detections = CopyrightDetector().detect(
+                    numbered_lines,
+                    include_copyrights=False,
+                    include_holders=True,
+                    include_authors=False,
+                )
+
+                for holder_detection in holder_detections:
+                    package_holders.append(holder_detection.holder)
+
             package_holders = process_holders(package_holders)
 
             discovered_license_expressions = []
@@ -253,7 +277,7 @@ def get_consolidated_packages(codebase):
                     if package_resource_license_expression:
                         discovered_license_expressions.append(package_resource_license_expression)
                 if package_resource.holders:
-                    discovered_holders.extend(h.get('value') for h in package_resource.holders)
+                    discovered_holders.extend(h.get('holder') for h in package_resource.holders)
             discovered_holders = process_holders(discovered_holders)
 
             combined_discovered_license_expression = combine_expressions(discovered_license_expressions)
@@ -265,10 +289,10 @@ def get_consolidated_packages(codebase):
             c = Consolidation(
                 core_license_expression=package_license_expression,
                 # Sort holders by holder key
-                core_holders=[h for h, _ in sorted(copyright_summary.cluster(package_holders), key=lambda t: t[0].key)],
+                core_holders=[h for h, _ in sorted(copyright_tallies.cluster(package_holders), key=lambda t: t[0].key)],
                 other_license_expression=simplified_discovered_license_expression,
                 # Sort holders by holder key
-                other_holders=[h for h, _ in sorted(copyright_summary.cluster(discovered_holders), key=lambda t: t[0].key)],
+                other_holders=[h for h, _ in sorted(copyright_tallies.cluster(discovered_holders), key=lambda t: t[0].key)],
                 files_count=len([package_resource for package_resource in package_resources if package_resource.is_file]),
                 resources=package_resources,
             )
@@ -286,12 +310,12 @@ def get_consolidated_packages(codebase):
 
 
 def process_holders(holders):
-    holders = [copyright_summary.Text(key=holder, original=holder) for holder in holders]
+    holders = [copyright_tallies.Text(key=holder, original=holder) for holder in holders]
 
     for holder in holders:
         holder.normalize()
 
-    holders = list(copyright_summary.filter_junk(holders))
+    holders = list(copyright_tallies.filter_junk(holders))
 
     for holder in holders:
         holder.normalize()
@@ -340,7 +364,7 @@ def get_holders_consolidated_components(codebase):
                     child.save(codebase)
 
             if child.holders:
-                holders = process_holders(h['value'] for h in child.holders)
+                holders = process_holders(h['holder'] for h in child.holders)
                 if holders:
                     # Dedupe holders
                     d = {}
@@ -401,9 +425,11 @@ def create_consolidated_components(resource, codebase, holder_key):
     resources.append(resource)
     resource.extra_data['majority'] = True
     resource.save(codebase)
-
+    core_license_expression = combine_expressions(license_expressions)
+    if core_license_expression is not None:
+        core_license_expression = str(core_license_expression)
     c = Consolidation(
-        core_license_expression=combine_expressions(license_expressions),
+        core_license_expression=core_license_expression,
         core_holders=[holder],
         files_count=len([r for r in resources if r.is_file]),
         resources=resources,

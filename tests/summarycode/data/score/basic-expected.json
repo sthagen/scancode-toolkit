@@ -12,22 +12,27 @@
         "--license-clarity-score": true
       },
       "notice": "Generated with ScanCode and provided on an \"AS IS\" BASIS, WITHOUT WARRANTIES\nOR CONDITIONS OF ANY KIND, either express or implied. No content created from\nScanCode should be considered or used as legal advice. Consult an Attorney\nfor any legal advice.\nScanCode is a free software code scanning tool from nexB Inc. and others.\nVisit https://github.com/nexB/scancode-toolkit/ for support and download.",
-      "output_format_version": "1.0.0",
+      "output_format_version": "2.0.0",
       "message": null,
       "errors": [],
+      "warnings": [],
       "extra_data": {
-        "spdx_license_list_version": "3.14",
+        "spdx_license_list_version": "3.16",
         "files_count": 3
       }
     }
   ],
-  "license_clarity_score": {
-    "score": 85,
-    "declared": true,
-    "discovered": 1.0,
-    "consistency": true,
-    "spdx": false,
-    "license_texts": true
+  "summary": {
+    "declared_license_expression": "mit",
+    "license_clarity_score": {
+      "score": 100,
+      "declared_license": true,
+      "precise_license_detection": true,
+      "has_license_text": true,
+      "declared_copyrights": true,
+      "conflicting_license_categories": false,
+      "ambigous_compound_licensing": false
+    }
   },
   "files": [
     {
@@ -62,7 +67,7 @@
       "is_key_file": false,
       "files_count": 3,
       "dirs_count": 0,
-      "size_count": 4258,
+      "size_count": 4286,
       "scan_errors": []
     },
     {
@@ -71,10 +76,10 @@
       "name": "README.md",
       "base_name": "README",
       "extension": ".md",
-      "size": 1320,
-      "sha1": "00f197776bbbca2726c6f1ccf258b6f08e6d3455",
-      "md5": "c284e8c75f00df967ea1c26065937335",
-      "sha256": "632d6c3d76c21bcf0dc6a7042caf29606cc604d9d20812787ea6dd193498d474",
+      "size": 1348,
+      "sha1": "f4399249b905c17338eb06776a7205d6f643d396",
+      "md5": "d897358d498fd2dbb1efedfa297fc0f3",
+      "sha256": "63940bc96c0feeef3b22b96d7d6a4873cdb7f12151ce3362967afdc7f8ec6698",
       "mime_type": "text/plain",
       "file_type": "ASCII text",
       "programming_language": null,
@@ -101,8 +106,8 @@
           "scancode_data_url": "https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/mit.yml",
           "spdx_license_key": "MIT",
           "spdx_url": "https://spdx.org/licenses/MIT",
-          "start_line": 19,
-          "end_line": 36,
+          "start_line": 20,
+          "end_line": 37,
           "matched_rule": {
             "identifier": "mit.LICENSE",
             "license_expression": "mit",
@@ -127,9 +132,21 @@
       "license_expressions": [
         "mit"
       ],
-      "percentage_of_license_text": 80.9,
-      "copyrights": [],
-      "holders": [],
+      "percentage_of_license_text": 79.31,
+      "copyrights": [
+        {
+          "copyright": "Copyright (c) Example, Inc.",
+          "start_line": 18,
+          "end_line": 18
+        }
+      ],
+      "holders": [
+        {
+          "holder": "Example, Inc.",
+          "start_line": 18,
+          "end_line": 18
+        }
+      ],
       "authors": [],
       "is_legal": false,
       "is_manifest": false,
@@ -206,14 +223,14 @@
       "percentage_of_license_text": 64.4,
       "copyrights": [
         {
-          "value": "Copyright (c) 2007 nexB Inc.",
+          "copyright": "Copyright (c) 2007 nexB Inc.",
           "start_line": 1,
           "end_line": 1
         }
       ],
       "holders": [
         {
-          "value": "nexB Inc.",
+          "holder": "nexB Inc.",
           "start_line": 1,
           "end_line": 1
         }
@@ -296,7 +313,7 @@
       "holders": [],
       "authors": [
         {
-          "value": "Alexander Plavinski <alexander.plavinski@invision.de>",
+          "author": "Alexander Plavinski <alexander.plavinski@invision.de>",
           "start_line": 6,
           "end_line": 6
         }

@@ -9,16 +9,20 @@
 
 import os
 
-from packagedcode.windows import parse
-
+from packagedcode import windows
 from packages_test_utils import PackageTester
+from scancode_config import REGEN_TEST_FIXTURES
 
 
 class TestWindows(PackageTester):
     test_data_dir = os.path.join(os.path.dirname(__file__), 'data')
 
+    def test_gosum_is_package_data_file(self):
+        test_file = self.get_test_loc('windows/mum/test.mum')
+        assert windows.MicrosoftUpdateManifest.is_package_data_file(test_file)
+
     def test_windows_mum_parse(self):
         test_file = self.get_test_loc('windows/mum/test.mum')
         expected_loc = self.get_test_loc('windows/mum/test.mum.expected')
-        package = parse(test_file)
-        self.check_package(package, expected_loc, regen=False)
+        package_data = windows.MicrosoftUpdateManifest.recognize(test_file)
+        self.check_packages(package_data, expected_loc, regen=REGEN_TEST_FIXTURES)

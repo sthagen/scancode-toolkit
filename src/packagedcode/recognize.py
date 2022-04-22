@@ -12,10 +12,7 @@ import os
 import sys
 
 from commoncode import filetype
-from commoncode.fileutils import file_name
-from commoncode.fileutils import splitext_name
-from packagedcode import PACKAGE_TYPES
-from typecode import contenttype
+from packagedcode import PACKAGE_DATA_CLASSES
 
 SCANCODE_DEBUG_PACKAGE_API = os.environ.get('SCANCODE_DEBUG_PACKAGE_API', False)
 
@@ -39,104 +36,64 @@ if TRACE:
     logger_debug = print
 
 """
-Recognize package manifests in files.
+Recognize package data in files.
 """
 
 
-def recognize_package_manifests(location):
+def recognize_package_data(location):
     """
-    Return a list of Package objects if any package_manifests were recognized for this
+    Return a list of Package objects if any package_data were recognized for this
     `location`, or None if there were no Packages found. Raises Exceptions on errors.
     """
 
     if not filetype.is_file(location):
         return
 
-    T = contenttype.get_type(location)
-    ftype = T.filetype_file.lower()
-    mtype = T.mimetype_file
+    recognized_package_data = []
+    for package_data_type in PACKAGE_DATA_CLASSES:
+        if not package_data_type.is_package_data_file(location):
+            continue
 
-    _base_name, extension = splitext_name(location, is_file=True)
-    filename = file_name(location)
-    extension = extension.lower()
-
-    if TRACE:
-        logger_debug(
-            'recognize_packages: ftype:', ftype, 'mtype:', mtype,
-            'pygtype:', T.filetype_pygment,
-            'fname:', filename, 'ext:', extension,
-        )
-
-    recognized_package_manifests = []
-    for package_type in PACKAGE_TYPES:
-        # Note: default to True if there is nothing to match against
-        metafiles = package_type.metafiles
-        if any(fnmatch.fnmatchcase(filename, metaf) for metaf in metafiles):
-            for recognized in package_type.recognize(location):
+        try:
+            for recognized in package_data_type.recognize(location):
                 if TRACE:
                     logger_debug(
-                        'recognize_packages: metafile matching: recognized:',
+                        'recognize_package_data: metafile matching: recognized:',
                         recognized,
                     )
                 if recognized and not recognized.license_expression:
                     # compute and set a normalized license expression
-                    recognized.license_expression = recognized.compute_normalized_license()
+                    try:
+                        recognized.license_expression = recognized.compute_normalized_license()
+                    except Exception:
+                        if SCANCODE_DEBUG_PACKAGE_API:
+                            raise
+                        recognized.license_expression = 'unknown'
+
                     if TRACE:
                         logger_debug(
-                            'recognize_packages: recognized.license_expression:',
-                            recognized.license_expression,
+                            'recognize_package_data: recognized.license_expression:',
+                            recognized.license_expression
                         )
-                recognized_package_manifests.append(recognized)
-            return recognized_package_manifests
+                recognized_package_data.append(recognized)
+            return recognized_package_data
 
-        type_matched = False
-        if package_type.filetypes:
-            type_matched = any(t in ftype for t in package_type.filetypes)
+        except NotImplementedError:
+            # build a plain package if recognize is not yet implemented
+            recognized = package_data_type()
+            if TRACE:
+                logger_debug(
+                    'recognize_package_data: NotImplementedError: recognized', recognized
+                )
 
-        mime_matched = False
-        if package_type.mimetypes:
-            mime_matched = any(m in mtype for m in package_type.mimetypes)
+            recognized_package_data.append(recognized)
 
-        extension_matched = False
-        extensions = package_type.extensions
-        if extensions:
-            extensions = (e.lower() for e in extensions)
-            extension_matched = any(
-                fnmatch.fnmatchcase(extension, ext_pat)
-                for ext_pat in extensions
+            if SCANCODE_DEBUG_PACKAGE_API:
+                raise
+
+        if TRACE: 
+            logger_debug(
+                'recognize_package_data: no match for type:', package_data_type
             )
 
-        if type_matched and mime_matched and extension_matched:
-            if TRACE:
-                logger_debug(f'recognize_packages: all matching for {package_type}')
-
-            try:
-                for recognized in package_type.recognize(location):
-                    # compute and set a normalized license expression
-                    if recognized and not recognized.license_expression:
-                        try:
-                            recognized.license_expression = recognized.compute_normalized_license()
-                        except Exception:
-                            if SCANCODE_DEBUG_PACKAGE_API:
-                                raise
-                            recognized.license_expression = 'unknown'
-
-                    if TRACE:
-                        logger_debug('recognize_packages: recognized', recognized)
-
-                    recognized_package_manifests.append(recognized)
-
-            except NotImplementedError:
-                # build a plain package if recognize is not yet implemented
-                recognized = package_type()
-                if TRACE:
-                    logger_debug('recognize_packages: recognized', recognized)
-
-                recognized_package_manifests.append(recognized)
-
-                if SCANCODE_DEBUG_PACKAGE_API:
-                    raise
-
-            return recognized_package_manifests
-
-        if TRACE: logger_debug('recognize_packages: no match for type:', package_type)
+        return recognized_package_data

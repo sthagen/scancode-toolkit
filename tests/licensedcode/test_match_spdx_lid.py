@@ -11,11 +11,10 @@ import os
 import json
 import unittest
 
-from license_expression import Licensing
-from license_expression import ExpressionError
-
 from commoncode.testcase import FileBasedTesting
 from commoncode import text
+from license_expression import Licensing
+from license_expression import ExpressionError
 
 from licensedcode import cache
 from licensedcode.cache import get_spdx_symbols
@@ -29,6 +28,8 @@ from licensedcode.match_spdx_lid import split_spdx_lid
 from licensedcode.match_spdx_lid import _split_spdx_lid
 from licensedcode import models
 from licensedcode.query import Query
+from scancode_config import REGEN_TEST_FIXTURES
+
 
 
 TEST_DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
@@ -57,7 +58,7 @@ From uboot: the first two lines are patch-like:
         assert qry.spdx_lines == expected
 
 
-def get_query_spdx_lines_test_method(test_loc , expected_loc, regen=False):
+def get_query_spdx_lines_test_method(test_loc , expected_loc, regen=REGEN_TEST_FIXTURES):
     """
     Collect a list of tuples (original line text, start known pos, end known
     pos) for SPDX identifier lines found in the file at `test_loc` and assert
@@ -80,7 +81,7 @@ def get_query_spdx_lines_test_method(test_loc , expected_loc, regen=False):
     return test_method
 
 
-def build_spdx_line_tests(clazz, test_dir='spdx/lines', regen=False):
+def build_spdx_line_tests(clazz, test_dir='spdx/lines', regen=REGEN_TEST_FIXTURES):
     """
     Dynamically build test methods from test files to test SPDX lines collection.
     """
@@ -104,7 +105,7 @@ class TestSpdxQueryLinesDataDriven(unittest.TestCase):
     pass
 
 
-build_spdx_line_tests(clazz=TestSpdxQueryLinesDataDriven, regen=False)
+build_spdx_line_tests(clazz=TestSpdxQueryLinesDataDriven, regen=REGEN_TEST_FIXTURES)
 
 
 class TestMatchSpdx(FileBasedTesting):
@@ -363,7 +364,7 @@ class TestMatchSpdx(FileBasedTesting):
 
         assert all(s.wrapped for s in licensing.license_symbols(expression, decompose=True))
 
-    def test_get_expression_complex_with_unknown_symbols_and_refs(self):
+    def test_get_expression_complex_with_other_spdx_symbols_and_refs(self):
         licensing = Licensing()
         spdx_symbols = get_spdx_symbols()
         unknown_symbol = get_unknown_spdx_symbol()
@@ -374,10 +375,10 @@ class TestMatchSpdx(FileBasedTesting):
 
         expression = get_expression(line_text, licensing, spdx_symbols, unknown_symbol)
 
-        expected = 'epl-2.0 OR apache-2.0 OR gpl-2.0 WITH classpath-exception-2.0 OR unknown-spdx WITH unknown-spdx'
+        expected = 'epl-2.0 OR apache-2.0 OR gpl-2.0 WITH classpath-exception-2.0 OR gpl-2.0 WITH openjdk-exception'
         assert expression.render() == expected
 
-        expected = ['epl-2.0', 'apache-2.0', 'gpl-2.0', 'classpath-exception-2.0', 'unknown-spdx', 'unknown-spdx']
+        expected = ['epl-2.0', 'apache-2.0', 'gpl-2.0', 'classpath-exception-2.0', 'gpl-2.0', 'openjdk-exception']
         assert licensing.license_keys(expression, unique=False) == expected
 
         assert all(s.wrapped for s in licensing.license_symbols(expression, decompose=True))

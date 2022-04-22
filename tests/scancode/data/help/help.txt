@@ -9,7 +9,7 @@ Options:
 
   primary scans:
     -l, --license    Scan <input> for licenses.
-    -p, --package    Scan <input> for package manifests and build scripts.
+    -p, --package    Scan <input> for package data and build scripts.
     -c, --copyright  Scan <input> for copyrights.
 
   other scans:
@@ -50,6 +50,8 @@ Options:
     --debian FILE           Write scan output in machine-readable Debian copyright
                             format to FILE.
     --custom-template FILE  Use this Jinja template FILE as a custom template.
+    --cyclonedx FILE        Write scan output in CycloneDX JSON format to FILE.
+    --cyclonedx-xml FILE    Write scan output in CycloneDX XML format to FILE.
     --spdx-rdf FILE         Write scan output as SPDX RDF to FILE.
     --spdx-tv FILE          Write scan output as SPDX Tag/Value to FILE.
     --html-app FILE         (DEPRECATED: use the ScanCode Workbench app instead )
@@ -104,22 +106,28 @@ Options:
                              codebase level.
     --license-policy FILE    Load a License Policy file and apply it to the scan
                              at the Resource level.
+    --licenses-reference     Include a reference of all the licenses referenced in
+                             this scan with the data details and full texts.
     --mark-source            Set the "is_source" to true for directories that
                              contain over 90% of source files as children and
                              descendants. Count the number of source files in a
                              directory as a new source_file_counts attribute
-    --summary                Summarize license, copyright and other scans at the
-                             codebase level.
-    --summary-by-facet       Summarize license, copyright and other scans and
-                             group the results by facet.
-    --summary-key-files      Summarize license, copyright and other scans for key,
-                             top-level files. Key files are top-level codebase
-                             files such as COPYING, README and package manifests
-                             as reported by the --classify option "is_legal",
-                             "is_readme", "is_manifest" and "is_top_level" flags.
-    --summary-with-details   Summarize license, copyright and other scans at the
-                             codebase level, keeping intermediate details at the
-                             file and directory level.
+    --summary                Summarize scans by providing declared origin
+                             information and other detected origin info at the
+                             codebase attribute level.
+    --tallies                Compute tallies for license, copyright and other
+                             scans at the codebase level.
+    --tallies-by-facet       Compute tallies for license, copyright and other
+                             scans and group the results by facet.
+    --tallies-key-files      Compute tallies for license, copyright and other
+                             scans for key, top-level files. Key files are top-
+                             level codebase files such as COPYING, README and
+                             package manifests as reported by the --classify
+                             option "is_legal", "is_readme", "is_manifest" and
+                             "is_top_level" flags.
+    --tallies-with-details   Compute tallies of license, copyright and other scans
+                             at the codebase level, keeping intermediate details
+                             at the file and directory level.
 
   core:
     --timeout <secs>         Stop an unfinished file scan after a timeout in
@@ -142,6 +150,13 @@ Options:
                              Descend at most INTEGER levels of directories below
                              and including the starting directory. Use 0 for no
                              scan depth limit.
+
+  miscellaneous:
+    --reindex-licenses              Rebuild the license index and exit.
+    --reindex-licenses-for-all-languages
+                                    [EXPERIMENTAL] Rebuild the license index
+                                    including texts all languages (and not only
+                                    English) and exit.
 
   documentation:
     -h, --help       Show this message and exit.

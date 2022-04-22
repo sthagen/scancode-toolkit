@@ -182,8 +182,8 @@ class TestIndexing(IndexTesting):
         try:
             MiniLicenseIndex(models.load_rules(rule_dir))
             self.fail('Exception on dupes not raised')
-        except AssertionError as e:
-            assert u'Duplicate rules' in str(e)
+        except index.DuplicateRuleError as e:
+            assert 'Duplicate rules' in str(e)
 
     @pytest.mark.scanslow
     def test_index_does_not_fail_on_rules_with_similar_normalized_names(self):
@@ -191,6 +191,19 @@ class TestIndexing(IndexTesting):
         lics_dir = self.get_test_loc('index/similar_names/licenses')
         rules = models.get_rules(licenses_data_dir=lics_dir, rules_data_dir=rules_dir)
         index.LicenseIndex(rules)
+
+    @pytest.mark.scanslow
+    def test_index_rules_with_key_phrases_and_without_are_duplicates(self):
+        rules_dir = self.get_test_loc('index/duplicate-key-phrases/rules')
+        lics_dir = self.get_test_loc('index/duplicate-key-phrases/licenses')
+        rules = models.get_rules(licenses_data_dir=lics_dir, rules_data_dir=rules_dir)
+        try:
+            idx = index.LicenseIndex(rules)
+            for rid, tids in enumerate(idx.tids_by_rid):
+                print(idx.rules_by_rid[rid].rid, repr(" ".join(idx.tokens_by_tid[t] for t in tids)))
+            raise Exception("Exception not raised for duplicated rules")
+        except index.DuplicateRuleError as e:
+            assert str(e).startswith('Duplicate rules')
 
 
 class TestMatchNoTemplates(IndexTesting):
@@ -524,8 +537,10 @@ No part of match        '''
         assert match.matcher == match_seq.MATCH_SEQ
 
     def test_match_with_templates_with_redundant_tokens_yield_single_exact_match(self):
-        _stored_text = u'copyright reserved mit is license, {{}} copyright reserved mit is license'
-        #                 0        1  2   3       4               5        6   7  8       9
+        from licensedcode_test_utils import query_tokens_with_unknowns  # NOQA
+
+        _stored_text = 'copyright reserved mit is license, copyright reserved mit is license'
+        #               0         1        2   3  4        5         6        7   8  9
         license_expression = 'tst'
         rule = models.Rule(license_expression=license_expression, stored_text=_stored_text)
         idx = MiniLicenseIndex([rule])
@@ -539,7 +554,7 @@ No part of match        '''
 
         expected = [None, None, u'copyright', u'reserved', u'mit', u'is', u'license', u'is', None, u'copyright', u'reserved', u'mit', u'is', u'license', None]
         #              0     1            2            3       4      5           6      7      8            9           10      11     12          13     14
-        assert tks_as_str(qry.tokens_with_unknowns()) == expected
+        assert tks_as_str(query_tokens_with_unknowns(qry)) == expected
 
         result = idx.match(query_string=querys)
         assert len(result) == 1

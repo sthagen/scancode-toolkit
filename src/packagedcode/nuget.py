@@ -10,6 +10,7 @@
 import attr
 import xmltodict
 
+from commoncode import filetype
 from packagedcode import models
 from packagedcode.utils import build_description
 
@@ -41,20 +42,16 @@ if TRACE:
 
 
 @attr.s()
-class NugetPackage(models.Package):
-    metafiles = ('[Content_Types].xml', '*.nuspec',)
+class NugetPackageData(models.PackageData):
+    # file_patterns = ('[Content_Types].xml', '*.nuspec',)
     filetypes = ('zip archive', 'microsoft ooxml',)
     mimetypes = ('application/zip', 'application/octet-stream',)
-    extensions = ('.nupkg',)
+    # extensions = ('.nupkg',)
 
     default_type = 'nuget'
     default_web_baseurl = 'https://www.nuget.org/packages/'
     default_download_baseurl = 'https://www.nuget.org/api/v2/package/'
     default_api_baseurl = 'https://api.nuget.org/v3/registration3/'
-
-    @classmethod
-    def recognize(cls, location):
-        yield parse(location)
 
     @classmethod
     def get_package_root(cls, manifest_resource, codebase):
@@ -97,75 +94,92 @@ nuspec_tags = [
 ]
 
 
-def _parse_nuspec(location):
+@attr.s()
+class Nuspec(NugetPackageData, models.PackageDataFile):
+
+    file_patterns = ('*.nuspec',)
+    extensions = ('.nuspec',)
+
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the file at ``location`` is likely a manifest of this type.
+        """
+        return filetype.is_file(location) and location.endswith('.nuspec')
+
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        with open(location , 'rb') as loc:
+            parsed = xmltodict.parse(loc)
+
+        if TRACE:
+            logger_debug('parsed:', parsed)
+        if not parsed:
+            return
+
+        pack = parsed.get('package', {}) or {}
+        nuspec = pack.get('metadata')
+        if not nuspec:
+            return
+
+        name=nuspec.get('id')
+        version=nuspec.get('version')
+
+        # Summary: A short description of the package for UI display. If omitted, a
+        # truncated version of description is used.
+        description = build_description(nuspec.get('summary') , nuspec.get('description'))
+
+        # title: A human-friendly title of the package, typically used in UI
+        # displays as on nuget.org and the Package Manager in Visual Studio. If not
+        # specified, the package ID is used.
+        title = nuspec.get('title')
+        if title and title != name:
+            description = build_description(nuspec.get('title') , description)
+
+        parties = []
+        authors = nuspec.get('authors')
+        if authors:
+            parties.append(models.Party(name=authors, role='author'))
+
+        owners = nuspec.get('owners')
+        if owners:
+            parties.append(models.Party(name=owners, role='owner'))
+
+        repo = nuspec.get('repository') or {}
+        vcs_tool = repo.get('@type') or ''
+        vcs_repository = repo.get('@url') or ''
+        vcs_url =None
+        if vcs_repository:
+            if vcs_tool:
+                vcs_url = '{}+{}'.format(vcs_tool, vcs_repository)
+            else:
+                vcs_url = vcs_repository
+
+        yield cls(
+            name=name,
+            version=version,
+            description=description or None,
+            homepage_url=nuspec.get('projectUrl') or None,
+            parties=parties,
+            declared_license=nuspec.get('licenseUrl') or None,
+            copyright=nuspec.get('copyright') or None,
+            vcs_url=vcs_url,
+        )
+
+
+@attr.s()
+class NugetPackage(NugetPackageData, models.Package):
     """
-    Return a dictionary of Nuget metadata from a .nuspec file at location.
-    Return None if this is not a parsable nuspec.
-    Raise Exceptions on errors.
+    A Nuget Package that is created out of one/multiple nuget package
+    manifests.
     """
-    if not location.endswith('.nuspec'):
-        return
-    with open(location , 'rb') as loc:
-        return  xmltodict.parse(loc)
 
-
-def parse(location):
-    """
-    Return a Nuget package from a nuspec XML file at `location`.
-    Return None if this is not a parsable nuspec.
-    """
-    parsed = _parse_nuspec(location)
-    if TRACE:
-        logger_debug('parsed:', parsed)
-    if not parsed:
-        return
-
-    pack = parsed.get('package', {}) or {}
-    nuspec = pack.get('metadata')
-    if not nuspec:
-        return
-
-    name=nuspec.get('id')
-    version=nuspec.get('version')
-
-    # Summary: A short description of the package for UI display. If omitted, a
-    # truncated version of description is used.
-    description = build_description(nuspec.get('summary') , nuspec.get('description'))
-
-    # title: A human-friendly title of the package, typically used in UI
-    # displays as on nuget.org and the Package Manager in Visual Studio. If not
-    # specified, the package ID is used.
-    title = nuspec.get('title')
-    if title and title != name:
-        description = build_description(nuspec.get('title') , description)
-
-    parties = []
-    authors = nuspec.get('authors')
-    if authors:
-        parties.append(models.Party(name=authors, role='author'))
-
-    owners = nuspec.get('owners')
-    if owners:
-        parties.append(models.Party(name=owners, role='owner'))
-
-    repo = nuspec.get('repository') or {}
-    vcs_tool = repo.get('@type') or ''
-    vcs_repository = repo.get('@url') or ''
-    vcs_url =None
-    if vcs_repository:
-        if vcs_tool:
-            vcs_url = '{}+{}'.format(vcs_tool, vcs_repository)
-        else:
-            vcs_url = vcs_repository
-
-    package = NugetPackage(
-        name=name,
-        version=version,
-        description=description or None,
-        homepage_url=nuspec.get('projectUrl') or None,
-        parties=parties,
-        declared_license=nuspec.get('licenseUrl') or None,
-        copyright=nuspec.get('copyright') or None,
-        vcs_url=vcs_url,
-    )
-    return package
+    @property
+    def manifests(self):
+        return [
+            Nuspec
+        ]

@@ -15,9 +15,10 @@ import unittest
 import pytest
 
 from licensedcode_test_utils import build_tests  # NOQA
+from scancode_config import REGEN_TEST_FIXTURES
+
 
 pytestmark = pytest.mark.scanslow
-
 
 """
 Data-driven tests using expectations stored in YAML files.
@@ -30,6 +31,7 @@ TEST_DIR = abspath(join(dirname(__file__), 'data'))
 class TestDataDrivenExternal(unittest.TestCase):
     pass
 
+
 build_tests(
     join(TEST_DIR, 'datadriven/external'),
-    clazz=TestDataDrivenExternal, regen=False)
+    clazz=TestDataDrivenExternal, regen=REGEN_TEST_FIXTURES)

@@ -12,8 +12,10 @@ from os.path import join
 
 from commoncode.testcase import FileDrivenTesting
 from commoncode.resource import Codebase
+
 from scancode.cli_test_utils import run_scan_click
 from scancode.cli_test_utils import check_json_scan
+from scancode_config import REGEN_TEST_FIXTURES
 from summarycode.classify import set_classification_flags
 from summarycode.classify import FileClassifier
 
@@ -52,7 +54,7 @@ class TestClassify(FileDrivenTesting):
             set_classification_flags(res)
             assert not res.is_legal
 
-    def test_set_classification_flags_is_manifest(self):
+    def test_set_classification_flags_is_package_data_file(self):
         test_dir = self.get_test_loc('classify/manifest')
         codebase = Codebase(
             test_dir, resource_attributes=FileClassifier.resource_attributes)
@@ -67,4 +69,4 @@ class TestClassify(FileDrivenTesting):
         result_file = self.get_temp_file('json')
         expected_file = self.get_test_loc('classify/cli.expected.json')
         run_scan_click(['--info', '--classify', '--json-pp', result_file, test_dir])
-        check_json_scan(expected_file, result_file, remove_file_date=True, regen=False)
+        check_json_scan(expected_file, result_file, remove_file_date=True, regen=REGEN_TEST_FIXTURES)

@@ -20,14 +20,13 @@ import zipfile
 from pathlib import Path
 
 import attr
-import dparse
+import dparse2
+import pip_requirements_parser
+import pkginfo2
 from packageurl import PackageURL
 from packaging.requirements import Requirement
 from packaging import markers
 from packaging.utils import canonicalize_name
-
-# TODO: replace this
-from pkginfo import SDist
 
 from commoncode import filetype
 from commoncode import fileutils
@@ -48,7 +47,7 @@ except ImportError:
 """
 Detect and collect Python packages information.
 """
-# TODO: add support for poetry and setup.cfg
+# TODO: add support for poetry and setup.cfg and metadata.json
 
 TRACE = False
 
@@ -68,33 +67,12 @@ if TRACE:
 
 
 @attr.s()
-class PythonPackage(models.Package):
-    metafiles = (
-        '*setup.py',
-        '*setup.cfg',
-        'PKG-INFO',
-        'METADATA',
-        # TODO: we are ignoing sdists such as tar.gz and pex, pyz, etc.
-        '*.whl',
-        '*.egg',
-        '*requirements*.txt',
-        '*requirements*.pip',
-        '*requirements*.in',
-        '*Pipfile.lock',
-        'conda.yml',
-        '*setup.cfg',
-        'tox.ini',
-    )
-    extensions = ('.egg', '.whl', '.pyz', '.pex',)
+class PythonPackageData(models.PackageData):
     default_type = 'pypi'
     default_primary_language = 'Python'
     default_web_baseurl = 'https://pypi.org'
     default_download_baseurl = 'https://pypi.org/packages/source'
     default_api_baseurl = 'https://pypi.org/pypi'
-
-    @classmethod
-    def recognize(cls, location):
-        yield parse(location)
 
     def compute_normalized_license(self):
         return compute_normalized_license(self.declared_license)
@@ -117,49 +95,41 @@ class PythonPackage(models.Package):
                 return f'{baseurl}/{self.name}/json'
 
 
-def parse(location):
-    """
-    Return a Package built from parsing a file or directory at 'location'.
-    """
-    parsers = (
-        parse_metadata,
-        parse_setup_py,
-        parse_pipfile_lock,
-        parse_dependency_file,
-        parse_archive,
-        parse_sdist,
-    )
-
-    # FIXME: this does not make sense
-    # try all available parser in a well defined order
-    for parser in parsers:
-        package = parser(location)
-        if package:
-            return package
-
-
 meta_dir_suffixes = '.dist-info', '.egg-info', 'EGG-INFO',
 meta_file_names = 'PKG-INFO', 'METADATA',
 
 
-def parse_metadata(location):
+@attr.s()
+class MetadataFile(PythonPackageData, models.PackageDataFile):
+
+    file_patterns = meta_file_names
+
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the file at ``location`` is likely a manifest of this type.
+        """
+        return filetype.is_file(location) and location.endswith(meta_file_names)
+
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        yield parse_metadata(cls, location)
+
+
+def parse_metadata(cls, location):
     """
     Return a PythonPackage from an  PKG-INFO or METADATA file ``location``
     string or pathlib.Path-like object.
 
     Looks in neighboring files as needed when an installed layout is found.
     """
-    # FIXME: handle other_urls
-
-    if not location:
-        return
-
     path = location
     if not isinstance(location, (Path, ZipPath)):
         path = Path(location)
-
-    if not path.name.endswith(meta_file_names):
-        return
 
     # build from dir if we are an installed distro
     parent = path.parent
@@ -168,10 +138,11 @@ def parse_metadata(location):
 
     dist = importlib_metadata.PathDistribution(path)
 
+    # FIXME: handle other_urls
     meta = dist.metadata
     urls, other_urls = get_urls(meta)
 
-    return PythonPackage(
+    return cls(
         name=get_attribute(meta, 'Name'),
         version=get_attribute(meta, 'Version'),
         description=get_description(meta, location),
@@ -186,115 +157,294 @@ def parse_metadata(location):
 bdist_file_suffixes = '.whl', '.egg',
 
 
-def parse_archive(location):
-    """
-    Return a PythonPackage from a package archive wheel or egg file at
-    ``location``.
-    """
-    if not location or not location.endswith(bdist_file_suffixes):
-        return
+@attr.s()
+class BinaryDistArchive(PythonPackageData, models.PackageDataFile):
 
-    with zipfile.ZipFile(location) as zf:
-        for path in ZipPath(zf).iterdir():
-            if not path.name.endswith(meta_dir_suffixes):
-                continue
-            for metapath in path.iterdir():
-                if metapath.name.endswith(meta_file_names):
-                    return parse_metadata(metapath)
+    file_patterns = ('*.whl', '*.egg',)
+    extensions = bdist_file_suffixes
+
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the file at ``location`` is likely a manifest of this type.
+        """
+        return filetype.is_file(location) and location.endswith(bdist_file_suffixes)
+
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        with zipfile.ZipFile(location) as zf:
+            for path in ZipPath(zf).iterdir():
+                if not path.name.endswith(meta_dir_suffixes):
+                    continue
+                for metapath in path.iterdir():
+                    if metapath.name.endswith(meta_file_names):
+                        yield parse_metadata(cls, metapath)
 
 
 sdist_file_suffixes = '.tar.gz', '.tar.bz2', '.zip',
 
 
-def parse_sdist(location):
-    """
-    Return a PythonPackage from an sdist source distribution file at
-    ``location`` such as a .zip, .tar.gz or .tar.bz2 (leagcy) file.
-    """
-    # FIXME: add dependencies
-    # FIXME: handle other_urls
+@attr.s()
+class SourceDistArchive(PythonPackageData, models.PackageDataFile):
+    # TODO: we are ignoing sdists such as pex, pyz, etc.
+    file_patterns = ('*.tar.gz', '*.tar.bz2', '*.zip',)
+    extensions = sdist_file_suffixes
 
-    if not location or not location.endswith(sdist_file_suffixes):
-        return
-    sdist = SDist(location)
-    urls, other_urls = get_urls(sdist)
-    return PythonPackage(
-        name=sdist.name,
-        version=sdist.version,
-        description=get_description(sdist, location=location),
-        declared_license=get_declared_license(sdist),
-        keywords=get_keywords(sdist),
-        parties=get_parties(sdist),
-        **urls,
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the file at ``location`` is likely a manifest of this type.
+        """
+        return filetype.is_file(location) and location.endswith(sdist_file_suffixes)
+
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+
+        # FIXME: add dependencies
+        # FIXME: handle other_urls
+
+        try:
+            sdist = pkginfo2.SDist(location)
+        except ValueError:
+            return
+        urls, other_urls = get_urls(sdist)
+        yield cls(
+            name=sdist.name,
+            version=sdist.version,
+            description=get_description(sdist, location=location),
+            declared_license=get_declared_license(sdist),
+            keywords=get_keywords(sdist),
+            parties=get_parties(sdist),
+            **urls,
+        )
+
+
+@attr.s()
+class SetupPy(PythonPackageData, models.PackageDataFile):
+
+    file_patterns = ('setup.py',)
+    extensions = ('.py',)
+
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the file at ``location`` is likely a manifest of this type.
+        """
+        return filetype.is_file(location) and location.endswith('setup.py')
+
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        setup_args = get_setup_py_args(location)
+
+        # it may be legit to have a name-less package?
+        # in anycase we do not want to fail because of that
+        package_name = setup_args.get('name')
+        urls, other_urls = get_urls(setup_args)
+
+        detected_version = setup_args.get('version')
+        if not detected_version:
+            # search for possible dunder versions here and elsewhere
+            detected_version = detect_version_attribute(location)
+
+        yield cls(
+            name=package_name,
+            version=detected_version,
+            description=get_description(setup_args),
+            parties=get_parties(setup_args),
+            declared_license=get_declared_license(setup_args),
+            dependencies=get_setup_py_dependencies(setup_args),
+            keywords=get_keywords(setup_args),
+            **urls,
+        )
+
+
+@attr.s()
+class DependencyFile(PythonPackageData, models.PackageDataFile):
+
+    file_patterns = (
+        'Pipfile',
+        'conda.yml',
+        'setup.cfg',
+        'tox.ini',
     )
 
+    @classmethod
+    def is_package_data_file(cls, location):
+        for file_pattern in cls.file_patterns:
+            if filetype.is_file(location) and location.endswith(file_pattern):
+                return True
 
-def parse_setup_py(location):
-    """
-    Return a PythonPackage built from setup.py data.
-    """
-    # FIXME: handle other_urls
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        file_name = fileutils.file_name(location)
 
-    if not location or not location.endswith('setup.py'):
-        return
+        dependency_type = get_dparse2_supported_file_name(file_name)
+        if not dependency_type:
+            return
 
-    setup_args = get_setup_py_args(location)
+        dependent_packages = parse_with_dparse2(
+            location=location,
+            file_name=dependency_type,
+        )
+        yield cls(dependencies=dependent_packages)
 
-    # it may be legit to have a name-less package?
-    # in anycase we do not want to fail because of that
-    package_name = setup_args.get('name')
-    urls, other_urls = get_urls(setup_args)
 
-    detected_version = setup_args.get('version')
-    if not detected_version:
-        # search for possible dunder versions here and elsewhere
-        detected_version = detect_version_attribute(location)
+@attr.s()
+class PipfileLock(PythonPackageData, models.PackageDataFile):
 
-    return PythonPackage(
-        name=package_name,
-        version=detected_version,
-        description=get_description(setup_args),
-        parties=get_parties(setup_args),
-        declared_license=get_declared_license(setup_args),
-        dependencies=get_setup_py_dependencies(setup_args),
-        keywords=get_keywords(setup_args),
-        **urls,
+    file_patterns = ('Pipfile.lock',)
+    extensions = ('.lock',)
+
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the file at ``location`` is likely a manifest of this type.
+        """
+        return filetype.is_file(location) and location.endswith('Pipfile.lock')
+
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        with open(location) as f:
+            content = f.read()
+
+        data = json.loads(content)
+
+        sha256 = None
+        if '_meta' in data:
+            for name, meta in data['_meta'].items():
+                if name == 'hash':
+                    sha256 = meta.get('sha256')
+
+        dependent_packages = parse_with_dparse2(
+            location=location,
+            file_name='Pipfile.lock',
+        )
+        yield cls(sha256=sha256, dependencies=dependent_packages)
+
+
+@attr.s()
+class RequirementsFile(PythonPackageData, models.PackageDataFile):
+
+    file_patterns = (
+        '*requirement*.txt',
+        '*requirement*.pip',
+        '*requirement*.in',
+        'requires.txt',
+        'requirements/*.txt',
+        'requirements/*.pip',
+        'requirements/*.in',
     )
 
+    @classmethod
+    def is_package_data_file(cls, location):
+        """
+        Return True if the ``location`` is likely a pip requirements file.
+        """
+        return filetype.is_file(location) and is_requirements_file(location)
 
-def parse_dependency_file(location):
+    @classmethod
+    def recognize(cls, location):
+        """
+        Yield one or more Package manifest objects given a file ``location`` pointing to a
+        package archive, manifest or similar.
+        """
+        dependencies = get_requirements_txt_dependencies(location=location)
+        yield cls(dependencies=dependencies)
+
+
+def get_requirements_txt_dependencies(location):
     """
-    Return a PythonPackage built from a dparse-supported dependency file at
-    location.
+    Return a list of DependentPackage found in a requirements file at
+    ``location`` or an empty list.
     """
-    if not location:
-        return
+    req_file = pip_requirements_parser.RequirementsFile.from_file(
+        filename=location,
+        include_nested=False,
+    )
+    if not req_file or not req_file.requirements:
+        return []
 
-    dt = get_dparse_dependency_type(fileutils.file_name(location))
-    if dt:
-        dependent_packages = parse_with_dparse(location)
-        return PythonPackage(dependencies=dependent_packages)
+    dependent_packages = []
 
+    # for now we ignore plain options and errors
+    for req in req_file.requirements:
 
-def parse_pipfile_lock(location):
+        if req.name:
+            # will be None if not pinned
+            version = req.get_pinned_version
+            purl = PackageURL(type='pypi', name=req.name, version=version)
+
+        else:
+            # this is odd, but this can be null
+            purl = None
+
+        purl = purl and purl.to_string() or None
+
+        if req.is_editable:
+            requirement = req.dumps()
+        else:
+            requirement = req.dumps(with_name=False)
+
+        if location.endswith(('dev.txt', 'test.txt', 'tests.txt',)):
+            scope = 'development'
+            is_runtime = False
+            is_optional = True
+        else:
+            scope = 'install'
+            is_runtime = True
+            is_optional = False
+
+        dependent_packages.append(
+            models.DependentPackage(
+                purl=purl,
+                scope=scope,
+                is_runtime=is_runtime,
+                is_optional=is_optional,
+                is_resolved=req.is_pinned or False,
+                extracted_requirement=requirement
+            )
+        )
+
+    return dependent_packages
+
+@attr.s()
+class PythonPackage(PythonPackageData, models.Package):
     """
-    Return a PythonPackage built from a Python Pipfile.lock file at location.
+    A Python Package that is created out of one/multiple python package
+    manifests.
     """
-    if not location or not location.endswith('Pipfile.lock'):
-        return
-    with open(location) as f:
-        content = f.read()
 
-    data = json.loads(content)
-
-    sha256 = None
-    if '_meta' in data:
-        for name, meta in data['_meta'].items():
-            if name == 'hash':
-                sha256 = meta.get('sha256')
-
-    dependent_packages = parse_with_dparse(location)
-    return PythonPackage(sha256=sha256, dependencies=dependent_packages)
+    @property
+    def manifests(self):
+        return [
+            MetadataFile,
+            RequirementsFile,
+            PipfileLock,
+            DependencyFile,
+            SetupPy,
+            BinaryDistArchive,
+            SourceDistArchive
+        ]
 
 
 def get_attribute(metainfo, name, multiple=False):
@@ -584,7 +734,7 @@ def get_requires_dependencies(requires, default_scope='install'):
                 is_runtime=True,
                 is_optional=False,
                 is_resolved=is_resolved,
-                requirement=requirement,
+                extracted_requirement=requirement,
         ))
 
     return dependent_packages
@@ -625,6 +775,8 @@ def is_requirements_file(location):
     True
     >>> is_requirements_file('requirements.txt')
     True
+    >>> is_requirements_file('requirement.txt')
+    True
     >>> is_requirements_file('requirements.in')
     True
     >>> is_requirements_file('requirements.pip')
@@ -633,62 +785,59 @@ def is_requirements_file(location):
     True
     >>> is_requirements_file('some-requirements-dev.txt')
     True
-    >>> is_requirements_file('reqs.txt')
-    False
     >>> is_requirements_file('requires.txt')
     True
+    >>> is_requirements_file('requirements/base.txt')
+    True
+    >>> is_requirements_file('reqs.txt')
+    False
     """
     filename = fileutils.file_name(location)
     req_files = (
-        '*requirements*.txt',
-        '*requirements*.pip',
-        '*requirements*.in',
+        '*requirement*.txt',
+        '*requirement*.pip',
+        '*requirement*.in',
         'requires.txt',
     )
-    return any(fnmatch.fnmatchcase(filename, rf) for rf in req_files)
+    is_req = any(fnmatch.fnmatchcase(filename, rf) for rf in req_files)
+    if is_req:
+        return True
+
+    parent = fileutils.parent_directory(location)
+    parent_name = fileutils.file_name(parent)
+    pip_extensions = ('.txt', 'pip', '.in',)
+    return parent_name == 'requirements' and filename.endswith(pip_extensions)
 
 
-def get_dparse_dependency_type(file_name):
+def get_dparse2_supported_file_name(file_name):
     """
-    Return the type of a dependency as a string or None given a `file_name`
+    Return the file_name if this is supported or None given a `file_name`
     string.
     """
     # this is kludgy but the upstream data structure and API needs this
-    filetype_by_name_end = {
-        'Pipfile.lock': dparse.filetypes.pipfile_lock,
-        'Pipfile': dparse.filetypes.pipfile,
-        'conda.yml': dparse.filetypes.conda_yml,
-        'setup.cfg': dparse.filetypes.setup_cfg,
-        'tox.ini': dparse.filetypes.tox_ini,
-    }
-    for extensions, dependency_type in filetype_by_name_end.items():
-        if is_requirements_file(file_name):
-            return dparse.filetypes.requirements_txt
+    dfile_names = (
+        'Pipfile.lock',
+        'Pipfile',
+        'conda.yml',
+        'setup.cfg',
+        'tox.ini',
+    )
 
-        if file_name.endswith(extensions):
-            return dependency_type
+    for dfile_name in dfile_names:
+        if file_name.endswith(dfile_name):
+            return file_name
 
 
-def parse_with_dparse(location):
+def parse_with_dparse2(location, file_name=None):
     """
-    Return a list of DependentPackage built from a dparse-supported dependency
-    manifest such as requirements.txt, Conda manifest or Pipfile.lock files, or
-    return an empty list.
+    Return a list of DependentPackage built from a dparse2-supported dependency
+    manifest such as Conda manifest or Pipfile.lock files, or return an empty
+    list.
     """
-    is_dir = filetype.is_dir(location)
-    if is_dir:
-        return
-
-    file_name = fileutils.file_name(location)
-
-    dependency_type = get_dparse_dependency_type(file_name)
-    if not dependency_type:
-        return
-
     with open(location) as f:
         content = f.read()
 
-    dep_file = dparse.parse(content, file_type=dependency_type)
+    dep_file = dparse2.parse(content, file_name=file_name)
     if not dep_file:
         return []
 
@@ -699,7 +848,7 @@ def parse_with_dparse(location):
         is_resolved = False
         purl = PackageURL(type='pypi', name=dependency.name)
 
-        # note: dparse.dependencies.Dependency.specs comes from
+        # note: dparse2.dependencies.Dependency.specs comes from
         # packaging.requirements.Requirement.specifier
         # which in turn is a packaging.specifiers.SpecifierSet objects
         # and a SpecifierSet._specs is a set of either:
@@ -729,7 +878,7 @@ def parse_with_dparse(location):
                 is_runtime=True,
                 is_optional=False,
                 is_resolved=is_resolved,
-                requirement=requirement
+                extracted_requirement=requirement
             )
         )
 

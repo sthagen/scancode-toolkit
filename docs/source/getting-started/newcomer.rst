@@ -93,11 +93,15 @@ Before you start using Scancode
 
 #. Run ``scancode -h`` to make sure Scancode was installed properly.
    If this shows any Error, refer the `Common Installation Errors Issue <https://github.com/nexB/scancode-toolkit/issues/1837>`_
-   for common errors. The documentation also has tips on :ref:`ide_config`.
+   for common errors.
 
 .. note::
 
     Refer :ref:`synopsis_quickstart` to make sure you are using the scan command correctly.
+
+.. note::
+
+    For Windows, Refer to :ref:`windows_app_install` for installing easily using Releases.
 
 .. _newcomer_scan_codebase:
 

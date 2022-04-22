@@ -35,43 +35,29 @@ Note: this API is unstable and still evolving.
 """
 
 
-def get_copyrights(location, deadline=sys.maxsize, **kwargs):
+def get_copyrights(
+    location,
+    deadline=sys.maxsize,
+    **kwargs,
+):
     """
     Return a mapping with a single 'copyrights' key with a value that is a list
     of mappings for copyright detected in the file at `location`.
     """
     from cluecode.copyrights import detect_copyrights
+    from cluecode.copyrights import Detection
 
-    copyrights = []
-    holders = []
-    authors = []
+    detections = detect_copyrights(
+        location,
+        include_copyrights=True,
+        include_holders=True,
+        include_authors=True,
+        include_copyright_years=True,
+        include_copyright_allrights=False,
+        deadline=deadline,
+    )
 
-    for dtype, value, start, end in detect_copyrights(location, deadline=deadline):
-
-        if dtype == 'copyrights':
-            copyrights.append(
-                dict([
-                    ('value', value),
-                    ('start_line', start),
-                    ('end_line', end)
-                ])
-            )
-        elif dtype == 'holders':
-            holders.append(
-                dict([
-                    ('value', value),
-                    ('start_line', start),
-                    ('end_line', end)
-                ])
-            )
-        elif dtype == 'authors':
-            authors.append(
-                dict([
-                    ('value', value),
-                    ('start_line', start),
-                    ('end_line', end)
-                ])
-            )
+    copyrights, holders, authors = Detection.split(detections, to_dict=True)
 
     results = dict([
         ('copyrights', copyrights),
@@ -79,10 +65,17 @@ def get_copyrights(location, deadline=sys.maxsize, **kwargs):
         ('authors', authors),
     ])
 
+    # TODO: do something if we missed the deadline
     return results
 
 
-def get_emails(location, threshold=50, test_slow_mode=False, test_error_mode=False, **kwargs):
+def get_emails(
+    location,
+    threshold=50,
+    test_slow_mode=False,
+    test_error_mode=False,
+    **kwargs,
+):
     """
     Return a mapping with a single 'emails' key with a value that is a list of
     mappings for emails detected in the file at `location`.
@@ -141,10 +134,16 @@ DEJACODE_LICENSE_URL = 'https://enterprise.dejacode.com/urn/urn:dje:license:{}'
 SCANCODE_LICENSEDB_URL = 'https://scancode-licensedb.aboutcode.org/{}'
 
 
-def get_licenses(location, min_score=0,
-                 include_text=False, license_text_diagnostics=False,
-                 license_url_template=SCANCODE_LICENSEDB_URL,
-                 deadline=sys.maxsize, **kwargs):
+def get_licenses(
+    location,
+    min_score=0,
+    include_text=False,
+    license_text_diagnostics=False,
+    license_url_template=SCANCODE_LICENSEDB_URL,
+    unknown_licenses=False,
+    deadline=sys.maxsize,
+    **kwargs,
+):
     """
     Return a mapping or detected_licenses for licenses detected in the file at
     `location`
@@ -163,6 +162,8 @@ def get_licenses(location, min_score=0,
     indicate the overall proportion of detected license text and license notice
     words in the file. This is used to determine if a file contains mostly
     licensing information.
+
+    If ``unknown_licenses`` is True, also detect unknown licenses.
     """
     from licensedcode import cache
     from licensedcode.spans import Span
@@ -173,7 +174,11 @@ def get_licenses(location, min_score=0,
     detected_expressions = []
 
     matches = idx.match(
-        location=location, min_score=min_score, deadline=deadline, **kwargs
+        location=location,
+        min_score=min_score,
+        deadline=deadline,
+        unknown_licenses=unknown_licenses,
+        **kwargs,
     )
 
     qspans = []
@@ -208,8 +213,11 @@ def get_licenses(location, min_score=0,
 
 
 def _licenses_data_from_match(
-        match, include_text=False, license_text_diagnostics=False,
-        license_url_template=SCANCODE_LICENSEDB_URL):
+    match,
+    include_text=False,
+    license_text_diagnostics=False,
+    license_url_template=SCANCODE_LICENSEDB_URL,
+):
     """
     Return a list of "licenses" scan data built from a license match.
     Used directly only internally for testing.
@@ -287,21 +295,21 @@ def _licenses_data_from_match(
 SCANCODE_DEBUG_PACKAGE_API = os.environ.get('SCANCODE_DEBUG_PACKAGE_API', False)
 
 
-def _get_package_manifests(location):
+def _get_package_data(location):
     """
     Return a mapping of package manifest information detected in the file at `location`.
 
     Note that all exceptions are caught if there are any errors while parsing a
     package manifest.
     """
-    from packagedcode.recognize import recognize_package_manifests
+    from packagedcode.recognize import recognize_package_data
     try:
-        recognized_package_manifests = recognize_package_manifests(location)
-        if recognized_package_manifests:
-            return recognized_package_manifests
+        recognized_package_data = recognize_package_data(location)
+        if recognized_package_data:
+            return recognized_package_data
     except Exception as e:
         if TRACE:
-            logger.error('_get_package_manifests: {}: Exception: {}'.format(location, e))
+            logger.error('_get_package_data: {}: Exception: {}'.format(location, e))
 
         if SCANCODE_DEBUG_PACKAGE_API:
             raise
@@ -313,17 +321,16 @@ def _get_package_manifests(location):
 def get_package_info(location, **kwargs):
     """
     Return a mapping of package information detected in the file at `location`.
-    
-    This API function is DEPRECATED, use `get_package_manifests` instead.
+    This API function is DEPRECATED, use `get_package_data` instead.
     """
     import warnings
     warnings.warn(
-        "`get_package_info` is deprecated. Use `get_package_manifests` instead.",
+        "`get_package_info` is deprecated. Use `get_package_data` instead.",
         DeprecationWarning,
         stacklevel=1
     )
-
-    recognized_packages = _get_package_manifests(location)
+    
+    recognized_packages = _get_package_data(location)
     
     if recognized_packages:
         return dict(packages=[
@@ -334,19 +341,19 @@ def get_package_info(location, **kwargs):
     return dict(packages=[])
 
 
-def get_package_manifests(location, **kwargs):
+def get_package_data(location, **kwargs):
     """
     Return a mapping of package manifest information detected in the file at `location`.
     """
-    recognized_package_manifests = _get_package_manifests(location)
+    recognized_package_data = _get_package_data(location)
     
-    if recognized_package_manifests:
-        return dict(package_manifests=[
-            package_manifests.to_dict()
-            for package_manifests in recognized_package_manifests
+    if recognized_package_data:
+        return dict(package_data=[
+            package_data.to_dict()
+            for package_data in recognized_package_data
         ])
 
-    return dict(package_manifests=[])
+    return dict(package_data=[])
 
 
 def get_file_info(location, **kwargs):

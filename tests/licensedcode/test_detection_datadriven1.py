@@ -15,9 +15,10 @@ import unittest
 import pytest
 
 from licensedcode_test_utils import build_tests  # NOQA
+from scancode_config import REGEN_TEST_FIXTURES
+
 
 pytestmark = pytest.mark.scanslow
-
 
 """
 Data-driven tests using expectations stored in YAML files.
@@ -26,9 +27,11 @@ Test functions are attached to test classes at module import time
 
 TEST_DIR = abspath(join(dirname(__file__), 'data'))
 
+
 class TestLicenseDataDriven1(unittest.TestCase):
     pass
 
+
 build_tests(
     join(TEST_DIR, 'datadriven/lic1'),
-    clazz=TestLicenseDataDriven1, regen=False)
+    clazz=TestLicenseDataDriven1, regen=REGEN_TEST_FIXTURES)
