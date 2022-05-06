@@ -9,6 +9,7 @@
 #
 
 import ast
+from distutils.core import setup
 import io
 import json
 import logging
@@ -16,6 +17,8 @@ import os
 import re
 import sys
 import zipfile
+from configparser import ConfigParser
+from io import StringIO
 from pathlib import Path
 
 import dparse2
@@ -30,6 +33,8 @@ from packaging.utils import canonicalize_name
 from packagedcode import models
 from packagedcode.utils import build_description
 from packagedcode.utils import combine_expressions
+from packagedcode.utils import yield_dependencies_from_package_data
+from packagedcode.utils import yield_dependencies_from_package_resource
 
 # FIXME: we always want to use the external library rather than the built-in for now
 import importlib_metadata
@@ -128,23 +133,128 @@ class BaseExtractedPythonLayout(BasePypiHandler):
     def assemble(cls, package_data, resource, codebase):
         # a source distribution can have many manifests
         datafile_name_patterns = (
-            'PKG-INFO',
-            'setup.py',
-            'setup.cfg',
             'Pipfile.lock',
             'Pipfile',
         ) + PipRequirementsFileHandler.path_patterns
 
-        parent = resource.parent(codebase)
-        yield from cls.assemble_from_many_datafiles(
-            datafile_name_patterns=datafile_name_patterns,
-            directory=parent,
-            codebase=codebase,
-        )
+        # TODO: we want PKG-INFO first, then (setup.py, setup.cfg), then pyproject.toml for poetry
+        # then we have the rest of the lock files (pipfile, pipfile.lock, etc.)
+
+        package_resource = None
+        if resource.name == 'PKG-INFO':
+            package_resource = resource
+        elif resource.name in datafile_name_patterns:
+            if resource.has_parent():
+                siblings = resource.siblings(codebase)
+                package_resource = [r for r in siblings if r.name == 'PKG-INFO']
+                if package_resource:
+                    package_resource = package_resource[0]
+
+        package = None
+        if package_resource:
+            pkg_data = package_resource.package_data[0]
+            pkg_data = models.PackageData.from_dict(pkg_data)
+            if pkg_data.purl:
+                package = models.Package.from_package_data(
+                    package_data=pkg_data,
+                    datafile_path=package_resource.path,
+                )
+                package_resource.for_packages.append(package.package_uid)
+                package_resource.save(codebase)
+                yield package_resource
+
+                yield from yield_dependencies_from_package_data(
+                    package_data=pkg_data,
+                    datafile_path=package_resource.path,
+                    package_uid=package.package_uid
+                )
+        else:
+            setup_resources = []
+            if resource.has_parent():
+                siblings = resource.siblings(codebase)
+                setup_resources = [r for r in siblings if r.name in ('setup.py', 'setup.cfg')]
+                setup_package_data = [
+                    (setup_resource, models.PackageData.from_dict(setup_resource.package_data[0]))
+                    for setup_resource in setup_resources
+                ]
+                setup_package_data = sorted(setup_package_data, key=lambda s: bool(s[1].purl), reverse=True)
+                for setup_resource, setup_pkg_data in setup_package_data:
+                    if setup_pkg_data.purl:
+                        if not package:
+                            package = models.Package.from_package_data(
+                                package_data=setup_pkg_data,
+                                datafile_path=setup_resource.path,
+                            )
+                            package_resource = setup_resource
+                        else:
+                            package.update(setup_pkg_data, setup_resource.path)
+                if package:
+                    for setup_resource, setup_pkg_data in setup_package_data:
+                        setup_resource.for_packages.append(package.package_uid)
+                        setup_resource.save(codebase)
+                        yield setup_resource
+
+                        yield from yield_dependencies_from_package_data(
+                            package_data=setup_pkg_data,
+                            datafile_path=setup_resource.path,
+                            package_uid=package.package_uid
+                        )
+
+        if package:
+            if not package.license_expression:
+                package.license_expression = compute_normalized_license(package.declared_license)
+            package_uid = package.package_uid
+
+            root = package_resource.parent(codebase)
+            if root:
+                for py_res in cls.walk_pypi(resource=root, codebase=codebase):
+                    if py_res.is_dir:
+                        continue
+                    if package_uid not in py_res.for_packages:
+                        py_res.for_packages.append(package_uid)
+                        py_res.save(codebase)
+                    yield py_res
+            elif codebase.has_single_resource:
+                if package_uid not in package_resource.for_packages:
+                    package_resource.for_packages.append(package_uid)
+                    package_resource.save(codebase)
+
+            yield package
+
+        else:
+            package_uid = None
+
+        for sibling in package_resource.siblings(codebase):
+            if sibling.name in datafile_name_patterns:
+                yield from yield_dependencies_from_package_resource(
+                    resource=sibling,
+                    package_uid=package_uid
+                )
+
+                if package_uid and package_uid not in sibling.for_packages:
+                    sibling.for_packages.append(package_uid)
+                    sibling.save(codebase)
+                yield sibling
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
-        return models.DatafileHandler.assign_package_to_parent_tree(package, resource, codebase)
+    def walk_pypi(cls, resource, codebase):
+        """
+        Walk the ``codebase`` Codebase top-down, breadth-first starting from the
+        ``resource`` Resource.
+
+        Skip the directory named "site-packages": this avoids
+        reporting nested vendored packages as being part of their parent.
+        Instead they will be reported on their own.
+        """
+        for child in resource.children(codebase):
+            if child.name == 'site-packages':
+                continue
+
+            yield child
+
+            if child.is_dir:
+                for subchild in cls.walk_pypi(child, codebase):
+                    yield subchild
 
 
 class PythonSdistPkgInfoFile(BaseExtractedPythonLayout):
@@ -547,6 +657,63 @@ class SetupCfgHandler(BaseExtractedPythonLayout):
     description = 'Python setup.cfg'
     documentation_url = 'https://peps.python.org/pep-0390/'
 
+    @classmethod
+    def parse(cls, location):
+        file_name = fileutils.file_name(location)
+
+        with open(location) as f:
+            content = f.read()
+
+        metadata = {}
+        parser = ConfigParser()
+        parser.readfp(StringIO(content))
+        for section in parser.values():
+            if section.name == 'metadata':
+                options = (
+                    'name',
+                    'version',
+                    'license',
+                    'url',
+                    'author',
+                    'author_email',
+                )
+                for name in options:
+                    content = section.get(name)
+                    if not content:
+                        continue
+                    metadata[name] = content
+
+        parties = []
+        author = metadata.get('author')
+        if author:
+            parties = [
+                models.Party(
+                    type=models.party_person,
+                    name=author,
+                    role='author',
+                    email=metadata.get('author_email'),
+                )
+            ]
+
+        dependency_type = get_dparse2_supported_file_name(file_name)
+        if not dependency_type:
+            return
+
+        dependencies = parse_with_dparse2(
+            location=location,
+            file_name=dependency_type,
+        )
+        yield models.PackageData(
+            datasource_id=cls.datasource_id,
+            type=cls.default_package_type,
+            name=metadata.get('name'),
+            version=metadata.get('version'),
+            parties=parties,
+            homepage_url=metadata.get('url'),
+            primary_language=cls.default_primary_language,
+            dependencies=dependencies,
+        )
+
 
 class PipfileHandler(BaseDependencyFileHandler):
     datasource_id = 'pipfile'
@@ -593,31 +760,6 @@ class PipfileLockHandler(BaseDependencyFileHandler):
 
 
 class PipRequirementsFileHandler(BaseDependencyFileHandler):
-    """
-    A pip requirements (or constraints) file.
-
-    Some example::
-    >>> PipRequirementsFileHandler.is_datafile('dev-requirements.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requirements.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requirement.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requirements.in', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requirements.pip', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requirements-dev.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('some-requirements-dev.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requires.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('requirements/base.txt', _bare_filename=True)
-    True
-    >>> PipRequirementsFileHandler.is_datafile('reqs.txt', _bare_filename=True)
-    True
-    """
     datasource_id = 'pip_requirements'
 
     path_patterns = (
