@@ -28,8 +28,10 @@ SCANCODE_DEBUG_PACKAGE_API = os.environ.get('SCANCODE_DEBUG_PACKAGE_API', False)
 
 TRACE = SCANCODE_DEBUG_PACKAGE_API
 
+
 def logger_debug(*args):
     pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,6 @@ if TRACE:
         return logger.debug(
             ' '.join(isinstance(a, str) and a or repr(a) for a in args)
         )
-
 
 # TODO: add dependencies
 
@@ -65,9 +66,9 @@ class DebianDebPackageHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # only assign this resource
-        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase)
+        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase, package_adder)
 
 
 # TODO: introspect archive
@@ -90,9 +91,9 @@ class DebianSourcePackageMetadataTarballHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # only assign this resource
-        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase)
+        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase, package_adder)
 
 
 # TODO: introspect archive
@@ -115,9 +116,9 @@ class DebianSourcePackageTarballHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # only assign this resource
-        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase)
+        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase, package_adder)
 
 
 # TODO: also look into neighboring md5sum and data.tarball copyright files!!!
@@ -138,11 +139,11 @@ class DebianControlFileInExtractedDebHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # two levels up
         root = resource.parent(codebase).parent(codebase)
         if root:
-            return models.DatafileHandler.assign_package_to_resources(package, root, codebase)
+            return models.DatafileHandler.assign_package_to_resources(package, root, codebase, package_adder)
 
 
 # TODO: also look into neighboring copyright files!!!
@@ -165,11 +166,11 @@ class DebianControlFileInSourceHandler(models.DatafileHandler):
             )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # two levels up
         root = resource.parent(codebase).parent(codebase)
         if root:
-            return models.DatafileHandler.assign_package_to_resources(package, root, codebase)
+            return models.DatafileHandler.assign_package_to_resources(package, root, codebase, package_adder)
 
 
 class DebianDscFileHandler(models.DatafileHandler):
@@ -196,9 +197,9 @@ class DebianDscFileHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # only assign this resource
-        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase)
+        return models.DatafileHandler.assign_package_to_resources(package, resource, codebase, package_adder)
 
 
 class DebianInstalledStatusDatabaseHandler(models.DatafileHandler):
@@ -220,7 +221,7 @@ class DebianInstalledStatusDatabaseHandler(models.DatafileHandler):
             )
 
     @classmethod
-    def assemble(cls, package_data, resource, codebase):
+    def assemble(cls, package_data, resource, codebase, package_adder):
         # get the root resource of the rootfs
         levels_up = len('var/lib/dpkg/status'.split('/'))
         root_resource = get_ancestor(
@@ -282,19 +283,31 @@ class DebianInstalledStatusDatabaseHandler(models.DatafileHandler):
         resources = []
         # TODO: keep track of missing files
         for res in root_resource.walk(codebase):
+            if TRACE:
+                logger_debug(f'   debian: assemble: root_walk: res: {res}')
             if not res.path.endswith(assemblable_paths):
                 continue
 
             for pkgdt in res.package_data:
                 package_data = models.PackageData.from_dict(pkgdt)
+                if TRACE:
+                    # logger_debug(f'     debian: assemble: root_walk: package_data: {package_data}')
+                    logger_debug(f'     debian: assemble: root_walk: package_data: {package_data.license_expression}')
+
+                # Most debian secondary files are only specific to a name. We
+                # have a few cases where the arch is included in the lists and
+                # md5sums.
                 package.update(
                     package_data=package_data,
                     datafile_path=res.path,
+                    replace=False,
+                    include_version=False,
+                    include_qualifiers=False,
+                    include_subpath=False,
                 )
                 package_file_references.extend(package_data.file_references)
 
-            res.for_packages.append(package_uid)
-            res.save(codebase)
+            package_adder(package_uid, res, codebase)
 
             # yield possible dependencies
             dependent_packages = package_data.dependencies
@@ -329,8 +342,7 @@ class DebianInstalledStatusDatabaseHandler(models.DatafileHandler):
 
             # path is found and processed: remove it, so we can check if we found all of them
             del file_references_by_path[res.path]
-            res.for_packages.append(package_uid)
-            res.save(codebase)
+            package_adder(package_uid, res, codebase)
 
             resources.append(res)
 
@@ -367,7 +379,7 @@ class DebianDistrolessInstalledDatabaseHandler(models.DatafileHandler):
             )
 
     @classmethod
-    def assemble(cls, package_data, resource, codebase):
+    def assemble(cls, package_data, resource, codebase, package_adder):
         # get the root resource of the rootfs
         levels_up = len('var/lib/dpkg/status.d/name'.split('/'))
         root_resource = get_ancestor(
@@ -401,8 +413,7 @@ class DebianDistrolessInstalledDatabaseHandler(models.DatafileHandler):
                         datafile_path=res.path,
                     )
 
-                res.for_packages.append(package_uid)
-                res.save(codebase)
+                package_adder(package_uid, res, codebase)
 
                 resources.append(res)
 
@@ -439,7 +450,7 @@ class DebianInstalledFilelistHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assemble(cls, package_data, resource, codebase):
+    def assemble(cls, package_data, resource, codebase, package_adder):
         # this is assembled only from a database entry
         return
 
@@ -465,7 +476,7 @@ class DebianInstalledMd5sumFilelistHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assemble(cls, package_data, resource, codebase):
+    def assemble(cls, package_data, resource, codebase, package_adder):
         # this is assembled only from a database entry
         return []
 
@@ -490,11 +501,11 @@ class DebianMd5sumFilelistInPackageHandler(models.DatafileHandler):
         )
 
     @classmethod
-    def assign_package_to_resources(cls, package, resource, codebase):
+    def assign_package_to_resources(cls, package, resource, codebase, package_adder):
         # two levels up
         root = resource.parent(codebase).parent(codebase)
         if root:
-            return models.DatafileHandler.assign_package_to_resources(package, root, codebase)
+            return models.DatafileHandler.assign_package_to_resources(package, root, codebase, package_adder)
 
 
 def build_package_data_from_package_filename(filename, datasource_id, package_type,):
