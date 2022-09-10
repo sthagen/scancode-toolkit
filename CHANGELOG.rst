@@ -14,6 +14,23 @@ Package detection:
   - OpenWRT packages.
   - Yocto/BitBake .bb recipes.
 
+- Update ``GemfileLockParser`` to track the gem which the Gemfile.lock is for,
+  which we assign to the new ``GemfileLockParser.primary_gem`` field. Update
+  ``GemfileLockHandler.parse()`` to handle the case where there is a primary gem
+  detected from a gemfile.lock. If there is a primary gem, a single ``Package``
+  is created and the detected gem data within the gemfile.lock are assigned as
+  dependencies. If there is no primary gem, then all of the dependencies are
+  collected into Package with no name and yielded.
+
+  https://github.com/nexB/scancode-toolkit/issues/3072
+
+- Fix issue where dependencies were not reported when scanning an extracted
+  Python project by modifying ``BaseExtractedPythonLayout.assemble()`` to favor
+  using package data from a PKG-INFO file from an egg-info directory. Package
+  data from a PKG-INFO file from an egg-info directory contains the dependency
+  information collected from the requirements.txt file along side PKG-INFO.
+
+  https://github.com/nexB/scancode-toolkit/issues/3083
 
 License detection:
 ~~~~~~~~~~~~~~~~~~~
@@ -29,6 +46,36 @@ License detection:
   "license_references" attribute that contains the data details for each
   detected license only once. This data can contain the reference license text
   as an option.
+
+
+
+
+v31.1.1 - 2022-09-02
+----------------------------------
+
+This is a minor release with a bug fix.
+
+- Do not display tracing/debug outputs at runtime
+
+
+
+v31.1.0 - 2022-08-29
+----------------------------------
+
+This is a minor release with critical bug fixes and minor updates.
+
+- Fix a critical bug in license detection
+- Add a few new licenses and license detection rules
+
+
+v31.0.2 - 2022-08-24
+----------------------------------
+
+This is a minor release with small bug fixes and minor updates.
+
+- Fix minor bug in PyPI package assembly
+- Add a few new licenses and license detection rules
+- Update commoncode
 
 
 v31.0.2 - 2022-08-24
