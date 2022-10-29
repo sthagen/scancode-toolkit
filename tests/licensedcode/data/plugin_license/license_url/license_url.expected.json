@@ -1,7 +1,7 @@
 {
   "files": [
     {
-      "path": "license_url",
+      "path": "scan",
       "type": "directory",
       "licenses": [],
       "license_expressions": [],
@@ -9,7 +9,7 @@
       "scan_errors": []
     },
     {
-      "path": "license_url/apache-1.0.txt",
+      "path": "scan/apache-1.0.txt",
       "type": "file",
       "licenses": [
         {
