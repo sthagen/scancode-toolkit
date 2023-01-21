@@ -175,7 +175,7 @@ License detection:
 
   - See https://github.com/nexB/scancode-toolkit/issues/3049
 
-- There is a new ``--get-license-data`` scancode command line option to export
+- There is a new console script ``scancode-license-data`` to export
   license data in JSON, YAML and HTML, with indexes and a static website for use
   in the licensedb web site. This becomes the  API way to getr scancode license
   data.
@@ -185,6 +185,17 @@ License detection:
 - The deprecated "--is-license-text" option has been removed.
   This is now built-in with the --license-text option and --info
   and exposed with the "percentage_of_license_text" attribute.
+
+
+v31.2.4 - 2023-01-09
+----------------------------------
+
+This is a minor bugfix release.
+
+There is a fix for an installation issue with the new "attrs" version 22.x
+when scancode-toolkit is installed using pip.
+This is resolved by vendoring attrs for use in licensedcode" to work around
+https://github.com/nexB/scancode-toolkit/issues/3179
 
 
 v31.2.3 - 2022-12-24
