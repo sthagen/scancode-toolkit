@@ -42,6 +42,18 @@ v32.1.0 (next, roadmap)
   See https://github.com/nexB/scancode-toolkit/issues/1745
 
 
+v32.0.5rc1 - 2023-06-12
+------------------------
+
+This is a minor bugfix release with the following updates:
+
+- A new `--todo` option is added to show the todo items that
+  should be reviewed, which are ambiguous license/package
+  detections.
+
+- New licenses and license detection rules. And other license
+  detection fixes.
+
 v32.0.4 - 2023-06-07
 ---------------------
 
@@ -103,6 +115,17 @@ also for some of the command line options.
 The output format version is now 3.0.0.
 
 
+Other updates
+~~~~~~~~~~~~~
+
+- We have a new ``--todo`` CLI option to have todo items for reviewers
+  with ambiguous license detections and package detections.
+  This adds a new codebase-level attribute ``todo`` which is a list
+  of ambiguous detections. Here the ambiguous detection attributes are:
+  - detection_id: same license unique license detection identifier or top-level
+    package identifier.
+  - detection: this is either a license_detection or a package_data mapping.
+  - review_comments: to explain the type of ambiguous detections.
 
 Package detection:
 ~~~~~~~~~~~~~~~~~~
