@@ -1,16 +1,16 @@
 {
   "license_detections": [
     {
-      "identifier": "x11_lucent-3c40145a-efd5-16ba-0a7a-9c28d9993bc2",
-      "license_expression": "x11-lucent",
+      "identifier": "bzip2_libbzip_2010-2234b9aa-1198-8ed2-f0d2-3310ced04b8a",
+      "license_expression": "bzip2-libbzip-2010",
       "detection_count": 1,
       "detection_log": [
         "unknown-intro-followed-by-match"
       ]
     },
     {
-      "identifier": "bzip2_libbzip_2010-2234b9aa-1198-8ed2-f0d2-3310ced04b8a",
-      "license_expression": "bzip2-libbzip-2010",
+      "identifier": "x11_lucent-3c40145a-efd5-16ba-0a7a-9c28d9993bc2",
+      "license_expression": "x11-lucent",
       "detection_count": 1,
       "detection_log": [
         "unknown-intro-followed-by-match"
@@ -22,7 +22,7 @@
       "path": "LICENSE-dist.txt",
       "type": "file",
       "detected_license_expression": "x11-lucent AND bzip2-libbzip-2010",
-      "detected_license_expression_spdx": "LicenseRef-scancode-x11-lucent AND bzip2-1.0.6",
+      "detected_license_expression_spdx": "dtoa AND bzip2-1.0.6",
       "license_detections": [
         {
           "license_expression": "x11-lucent",
