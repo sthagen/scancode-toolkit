@@ -114,6 +114,10 @@ class BaseNpmHandler(models.DatafileHandler):
             yield from models.DatafileHandler.assemble(package_data, resource, codebase, package_adder)
             return
 
+        # We do not have any package data detected here
+        if not package_resource.package_data:
+            return
+
         assert len(package_resource.package_data) == 1, f'Invalid package.json for {package_resource.path}'
         pkg_data = package_resource.package_data[0]
         pkg_data = models.PackageData.from_dict(pkg_data)

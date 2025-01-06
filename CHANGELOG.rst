@@ -14,7 +14,7 @@ v33.0.0 (next next, roadmap)
 - Dependencies for
 - Support for copyright detection objects.
 
-- We can now collect packages from a Go binary using go-inspector (Linux-only)
+- We can now collect packages from a Rust binary using rust-inspector (Linux-only)
 
 - A new field in packages with the license category for the
   detected license expression and also an API function to
@@ -88,6 +88,9 @@ Changes in Output Data Structure:
 
 - Drop python 3.8 support as this is end of life. Please use older releases if you
   are using python 3.8 but this is not recommended.
+
+- We can now collect packages from a Go binary using go-inspector (Linux-only)
+  See https://github.com/aboutcode-org/scancode-toolkit/pull/3894
 
 v32.2.1 - 2024-07-02
 ---------------------

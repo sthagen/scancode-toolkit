@@ -1043,9 +1043,9 @@ class DatafileHandler:
     # possible values are app, sys and info
     datasource_type = 'app'
 
-    # tuple of specifically supported operating systems. If None or empty, all platforms are supported
-    # possible values are win, mac, linux, freebsd
-    supported_oses = tuple()
+    # tuple of operating systems where getting package data using this DatafileHandler is supported.
+    # If None or empty, all platforms are supported, possible values are win, mac, linux, freebsd
+    supported_oses = None
 
     # Sequence of known fnmatch-style case-insensitive glob patterns (e.g., Unix
     # shell style patterns) that apply on the whole POSIX path for package
@@ -1100,7 +1100,16 @@ class DatafileHandler:
         """
         if filetype.is_file(location) or _bare_filename:
             loc = as_posixpath(location)
-            if any(fnmatchcase(loc, pat) for pat in cls.path_patterns):
+
+            # Some extension strings are used interchangebly
+            extension_aliases = {"yaml": "yml"}
+            path_patterns = list(cls.path_patterns)
+            for pattern in cls.path_patterns:
+                for extension, extension_alias in extension_aliases.items():
+                    new_pattern = pattern.replace(extension, extension_alias)
+                    path_patterns.append(new_pattern)
+
+            if any(fnmatchcase(loc, pat) for pat in path_patterns):
                 filetypes = filetypes or cls.filetypes
                 if not filetypes:
                     return True
