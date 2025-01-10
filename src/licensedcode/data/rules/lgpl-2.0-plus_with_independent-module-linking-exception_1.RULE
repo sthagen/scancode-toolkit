@@ -1,17 +1,13 @@
 ---
-license_expression: lgpl-2.1 WITH broadcom-linking-exception-2.0
+license_expression: lgpl-2.0-plus WITH independent-module-linking-exception
 is_license_notice: yes
+minimum_coverage: 90
 referenced_filenames:
     - COPYING
-notes: |
-    found in the freepascal compiler
-    Added in SPDX license list 3.26
-    Replaced by license: independent-modules-exception.LICENSE
-is_deprecated: yes
 ---
 
 The source code of the Free Pascal Runtime Libraries and packages are 
-distributed under the Library GNU General Public License 
+distributed under the {{Library GNU General Public License}}
 (see the file COPYING) with the following modification:
 
 As a special exception, the copyright holders of this library give you

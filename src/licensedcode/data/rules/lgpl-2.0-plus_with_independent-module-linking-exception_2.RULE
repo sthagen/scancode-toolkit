@@ -1,17 +1,17 @@
 ---
-license_expression: lgpl-2.1 WITH broadcom-linking-exception-2.0
+license_expression: lgpl-2.0-plus WITH independent-module-linking-exception
 is_license_notice: yes
+minimum_coverage: 90
 referenced_filenames:
     - COPYING
-notes: |
-    found in the freepascal compiler
-    Added in SPDX license list 3.26
-    Replaced by license: independent-modules-exception.LICENSE
-is_deprecated: yes
 ---
 
+This is the file COPYING.FPC, it applies to the Free Pascal Run-Time Library 
+(RTL) and packages (packages) distributed by members of the Free Pascal 
+Development Team.
+
 The source code of the Free Pascal Runtime Libraries and packages are 
-distributed under the Library GNU General Public License 
+distributed under the {{Library GNU General Public License}}
 (see the file COPYING) with the following modification:
 
 As a special exception, the copyright holders of this library give you
@@ -24,9 +24,3 @@ which is not derived from or based on this library. If you modify this
 library, you may extend this exception to your version of the library, but you are
 not obligated to do so. If you do not wish to do so, delete this exception
 statement from your version.
-
-If you didn't receive a copy of the file COPYING, contact:
-      Free Software Foundation
-      675 Mass Ave
-      Cambridge, MA  02139
-      USA
