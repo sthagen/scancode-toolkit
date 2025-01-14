@@ -1200,8 +1200,7 @@ class DatafileHandler:
         # update `for_packages` of a codebase resource.
         package_uid = package.package_uid
         if resource.path.endswith("-extract"):
-            archive_resource_path = resource.path.removesuffix("-extract")
-            archive_resource = codebase.get_resource(archive_resource_path)
+            archive_resource = resource.extracted_from(codebase)
             if archive_resource:
                 package_adder(package_uid, archive_resource, codebase)
 
