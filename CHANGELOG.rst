@@ -38,10 +38,47 @@ v33.0.0 (next next, roadmap)
 - Update Dockerfile and test container build.
   See https://github.com/aboutcode-org/scancode-toolkit/issues/3955
 
+v32.3.2 - 2024-01-20
+--------------------
+
+This is a patch release with license and package detection
+improvements, bugfixes and with new and updated license detection rules
+and new licenses added.
+
+Bugfixes:
+
+- Fix package resource assignment for JAVA jars in scancode.io
+  https://github.com/aboutcode-org/scancode-toolkit/pull/3983
+
+- Fix missing spdx license expression in license detections
+  https://github.com/aboutcode-org/scancode-toolkit/issues/4015
+
+- Enforce --path as a required parameter for scancode-license-data
+  console script.
+  https://github.com/aboutcode-org/scancode-toolkit/issues/4024
+
+- Fix conda environment.yaml parsing errors.
+  https://github.com/aboutcode-org/scancode-toolkit/pull/4078
+
+- Fix npm package parsing bug for packages with workspaces.
+  https://github.com/aboutcode-org/scancode.io/issues/1521
+
+New features/licenses:
+
+- Adds support for pnpm lock YAML v9
+  https://github.com/pnpm/spec/blob/master/lockfile/9.0.md
+
+- Add licenses from SPDX License List 3.26
+  https://github.com/aboutcode-org/scancode-toolkit/issues/4045
+
+- Add assembly and identification of conda package files in
+  root filesystem installations
+  https://github.com/aboutcode-org/scancode-toolkit/issues/4083
+
 v32.3.1 - 2024-01-06
 --------------------
 
-This is a minor release with license and package detection
+This is a patch release with license and package detection
 improvements, bugfixes and with new and updated license detection rules
 and new licenses added.
 
